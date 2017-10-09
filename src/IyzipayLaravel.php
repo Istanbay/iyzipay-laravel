@@ -98,10 +98,12 @@ class IyzipayLaravel
      */
     public function singlePayment(Payable $payable, Collection $products, $currency, $installment, $subscription = false): Transaction
     {
+    	// @todo: products variable can be a model
+
         $this->validateBillable($payable);
         $this->validateHasCreditCard($payable);
 
-        $messages = []; // @todo imporove here
+        $messages = []; // @todo: imporove here
         foreach ($payable->creditCards as $creditCard) {
             try {
                 $transaction = $this->createTransactionOnIyzipay(

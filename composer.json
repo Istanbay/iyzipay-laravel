@@ -21,7 +21,7 @@
       "email": "can@istanbay.com",
       "homepage": "https://istanbay.com",
       "role": "CTO"
-    },
+    }
   ],
   "require": {
     "php": "~7.0|~7.1",

@@ -141,7 +141,7 @@ trait Payable
     public function isSubscribeTo(Plan $plan): bool
     {
         foreach ($this->subscriptions as $subscription) {
-            if ($subscription->plan == $plan)
+            if ($subscription->plan == $plan && !$subscription->canceled())
             {
                 return $subscription->next_charge_at > Carbon::today()->startOfDay();
             }

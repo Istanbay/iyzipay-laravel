@@ -1,5 +1,5 @@
 {
-  "name": "iyzico/iyzipay-laravel",
+  "name": "Istanbay/iyzipay-laravel",
   "type": "library",
   "description": "Iyzipay (by Iyzico) integration for your Laravel projects.",
   "keywords": [
@@ -7,7 +7,7 @@
     "iyzico",
     "iyzipay"
   ],
-  "homepage": "https://github.com/iyzico/iyzipay-laravel",
+  "homepage": "https://github.com/Istanbay/iyzipay-laravel",
   "license": "MIT",
   "authors": [
     {
@@ -15,7 +15,13 @@
       "email": "mehmet.aydin.bahadir@gmail.com",
       "homepage": "https://actuallymab.github.io",
       "role": "Software Engineer"
-    }
+    },
+    {
+      "name": "Can Erdoğan",
+      "email": "can@istanbay.com",
+      "homepage": "https://istanbay.com",
+      "role": "CTO"
+    },
   ],
   "require": {
     "php": "~7.0|~7.1",

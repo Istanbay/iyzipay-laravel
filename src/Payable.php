@@ -155,6 +155,8 @@ trait Payable
      */
     public function paySubscription()
     {
+	    $this->load('subscriptions');
+
         foreach ($this->subscriptions as $subscription) {
             if ($subscription->canceled() || $subscription->next_charge_at > Carbon::today()->startOfDay()) {
                 continue;

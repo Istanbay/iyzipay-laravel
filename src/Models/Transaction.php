@@ -64,6 +64,10 @@ class Transaction extends Model
 
     public function getRefundedAmountAttribute()
     {
-        return array_sum(array_column($this->refunds, 'amount'));
+    	if(empty($this->refunds)) {
+    		return 0;
+	    }
+
+	    return array_sum( array_column( $this->refunds, 'amount' ) );
     }
 }

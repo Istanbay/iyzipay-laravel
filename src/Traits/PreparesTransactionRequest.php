@@ -3,6 +3,8 @@
 namespace Iyzico\IyzipayLaravel\Traits;
 
 use Iyzico\IyzipayLaravel\Exceptions\Fields\TransactionFieldsException;
+use Iyzico\IyzipayLaravel\Exceptions\Threeds\ThreedsCreateException;
+use Iyzico\IyzipayLaravel\Exceptions\Threeds\ThreedsInitializeException;
 use Iyzico\IyzipayLaravel\Exceptions\Transaction\TransactionSaveException;
 use Iyzico\IyzipayLaravel\Exceptions\Transaction\TransactionVoidException;
 use Iyzico\IyzipayLaravel\Models\CreditCard;
@@ -21,9 +23,12 @@ use Iyzipay\Model\Payment;
 use Iyzipay\Model\PaymentCard;
 use Iyzipay\Model\PaymentChannel;
 use Iyzipay\Model\PaymentGroup;
+use Iyzipay\Model\ThreedsInitialize;
+use Iyzipay\Model\ThreedsPayment;
 use Iyzipay\Options;
 use Iyzipay\Request\CreateCancelRequest;
 use Iyzipay\Request\CreatePaymentRequest;
+use Iyzipay\Request\CreateThreedsPaymentRequest;
 
 trait PreparesTransactionRequest
 {
@@ -100,6 +105,36 @@ trait PreparesTransactionRequest
         return $payment;
     }
 
+    protected function initializeThreedsOnIyzipay(
+        Payable $payable,
+        CreditCard $creditCard,
+        array $attributes,
+        $subscription = false
+    ): ThreedsInitialize {
+        $this->validateTransactionFields($attributes);
+        $paymentRequest = $this->createPaymentRequest($attributes, $subscription);
+        $paymentRequest->setPaymentCard($this->preparePaymentCard($payable, $creditCard));
+        $paymentRequest->setBuyer($this->prepareBuyer($payable));
+        $paymentRequest->setShippingAddress($this->prepareAddress($payable, 'shippingAddress'));
+        $paymentRequest->setBillingAddress($this->prepareAddress($payable, 'billingAddress'));
+        $paymentRequest->setBasketItems($this->prepareBasketItems($attributes['products']));
+        session()->flash('iyzico.products', $attributes['products']);
+
+        try {
+            $threedsInitialize = ThreedsInitialize::create($paymentRequest, $this->getOptions());
+        } catch (\Exception $e) {
+            throw new ThreedsInitializeException();
+        }
+
+        unset($paymentRequest);
+
+        if ($threedsInitialize->getStatus() != 'success') {
+            throw new ThreedsInitializeException($threedsInitialize->getErrorMessage());
+        }
+
+        return $threedsInitialize;
+    }
+
     /**
      * @param Transaction $transaction
      *
@@ -148,8 +183,33 @@ trait PreparesTransactionRequest
         $paymentRequest->setInstallment($attributes['installment']);
         $paymentRequest->setPaymentChannel(PaymentChannel::WEB);
         $paymentRequest->setPaymentGroup(($subscription) ? PaymentGroup::SUBSCRIPTION : PaymentGroup::PRODUCT);
+        if(in_array('transactionModel', $attributes)) {
+	        $paymentRequest->setConversationId( $attributes['transactionModel']->id );
+        }
+	    if(in_array('callback', $attributes)) {
+		    $paymentRequest->setCallbackUrl( $attributes['callback'] );
+	    }
 
         return $paymentRequest;
+    }
+
+    private function createThreedsPayment(Request $request): ThreedsPayment
+    {
+	    $threedsPaymentRequest = $this->prepareThreedsPaymentRequest($request->conversationId, $request->paymentId, $request->conversationData);
+
+	    try {
+		    $threedsPayment = ThreedsPayment::create( $threedsPaymentRequest, $this->getOptions() );
+	    } catch (\Exception $e) {
+		    throw new ThreedsCreateException();
+	    }
+
+	    unset($threedsPaymentRequest);
+
+	    if ($threedsPayment->getStatus() != 'success') {
+		    throw new ThreedsCreateException($threedsPayment->getErrorMessage());
+	    }
+
+	    return $threedsPayment;
     }
 
     /**
@@ -250,6 +310,18 @@ trait PreparesTransactionRequest
 
         return $basketItems;
     }
+
+	protected function prepareThreedsPaymentRequest ( $conversationId, $iyzipayKey, $conversationData): CreateThreedsPaymentRequest
+	{
+		$request = new CreateThreedsPaymentRequest();
+
+		$request->setLocale($this->getLocale());
+		$request->setConversationId($conversationId);
+		$request->setPaymentId($iyzipayKey);
+		$request->setConversationData($conversationData);
+
+		return $request;
+	}
 
     abstract protected function getLocale(): string;
 

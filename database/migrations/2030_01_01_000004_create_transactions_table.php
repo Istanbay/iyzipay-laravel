@@ -17,9 +17,11 @@ class CreateTransactionsTable extends Migration
             $table->foreign('subscription_id')->references('id')->on('subscriptions');
             $table->double('amount');
             $table->string('currency', 3)->default('TRY');
-            $table->longText('products');
-            $table->string('iyzipay_key');
+            $table->longText('products')->nullable();
+            $table->string('iyzipay_key')->nullable();
             $table->longText('refunds')->nullable();
+            $table->boolean('status')->nullable();
+            $table->longText('error')->nullable();
             $table->timestamp('voided_at')->nullable();
             $table->timestamps();
 	        $table->softDeletes();

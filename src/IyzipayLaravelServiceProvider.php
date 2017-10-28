@@ -20,6 +20,8 @@ class IyzipayLaravelServiceProvider extends ServiceProvider
             __DIR__ . '/../config/config.php' => config_path('iyzipay.php')
         ]);
 
+	    $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
+
         $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
 
         $this->app->booted(function () {

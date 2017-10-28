@@ -19,12 +19,15 @@ class Transaction extends Model
         'refunds',
         'iyzipay_key',
         'voided_at',
-        'currency'
+        'currency',
+        'status',
+        'error'
     ];
 
     protected $casts = [
         'products' => 'array',
-        'refunds'  => 'array'
+        'refunds'  => 'array',
+        'error'    => 'array',
     ];
 
     protected $dates = [
@@ -34,6 +37,16 @@ class Transaction extends Model
     protected $appends = [
         'refunded_amount'
     ];
+
+	public function scopeSuccess($query)
+	{
+		return $query->where('status', TRUE);
+	}
+
+	public function scopeFailure($query)
+	{
+		return $query->where('status', FALSE);
+	}
 
     public function billable(): BelongsTo
     {
@@ -50,18 +63,18 @@ class Transaction extends Model
         return $this->belongsTo(Subscription::class);
     }
 
-    public function void(): Transaction
+    public function cancel(): Transaction
     {
         if ($this->created_at < Carbon::today()->startOfDay()) {
             throw new TransactionVoidException('This transaction cannot be voided.');
         }
 
-        return IyzipayLaravel::void($this);
+        return IyzipayLaravel::cancel($this);
     }
 
     public function refund(): Transaction
     {
-        return IyzipayLaravel::void($this);
+        return IyzipayLaravel::cancel($this);
     }
 
     public function getRefundedAmountAttribute()

@@ -12,7 +12,9 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Route;
 use Iyzico\IyzipayLaravel\IyzipayLaravelFacade as IyzipayLaravel;
+use Iyzipay\Model\ThreedsInitialize;
 
 trait Payable
 {
@@ -105,16 +107,30 @@ trait Payable
      * @param bool $subscription
      * @return Transaction
      */
-    public function pay(Collection $products, $currency = 'TRY', $installment = 1, $subscription = false): Transaction
+    public function pay(Collection $products, CreditCard $creditCard, $currency = 'TRY', $installment = 1, $subscription = false): Transaction
     {
-        return IyzipayLaravel::singlePayment($this, $products, $currency, $installment, $subscription);
+        return IyzipayLaravel::singlePayment($this, $products, $creditCard, $currency, $installment, $subscription);
+    }
+
+	/**
+	 * @param Collection $products
+	 * @param CreditCard $creditCard
+	 * @param string     $currency
+	 * @param int        $installment
+	 * @param bool       $subscription
+	 *
+	 * @return ThreedsInitialize
+	 */
+	public function securePay(Collection $products, CreditCard $creditCard, $currency = 'TRY', $installment = 1, $subscription = false): ThreedsInitialize
+	{
+		return IyzipayLaravel::initializeThreeds($this, $products, $creditCard, $currency, $installment, $subscription);
     }
 
     /**
      * Subscribe to a plan.
      * @param Plan $plan
      */
-    public function subscribe(Plan $plan): void
+    public function subscribe(Plan $plan, CreditCard $creditCard): void
     {
         Model::unguard();
 
@@ -127,7 +143,7 @@ trait Payable
             ])
         );
 
-        $this->paySubscription();
+        $this->paySubscription($creditCard);
 
         Model::reguard();
     }
@@ -153,7 +169,7 @@ trait Payable
     /**
      * Payment for the subscriptions of payable
      */
-    public function paySubscription()
+    public function paySubscription(CreditCard $creditCard)
     {
 	    $this->load('subscriptions');
 
@@ -163,7 +179,7 @@ trait Payable
             }
 
             if ($subscription->next_charge_amount > 0) {
-                $transaction = $this->pay(collect([$subscription->plan]), $subscription->plan->currency, 1, true);
+                $transaction = $this->pay(collect([$subscription->plan]), $creditCard, $subscription->plan->currency, 1, true);
                 $transaction->subscription()->associate($subscription);
                 $transaction->save();
             }

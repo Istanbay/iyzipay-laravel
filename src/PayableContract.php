@@ -9,6 +9,7 @@ use Iyzico\IyzipayLaravel\StorableClasses\Plan;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 use Iyzipay\Model\ThreedsInitialize;
+use Iyzipay\Model\BkmInitialize;
 
 interface PayableContract
 {
@@ -29,9 +30,11 @@ interface PayableContract
 
 	public function securePay(Collection $products, CreditCard $creditCard, $currency = 'TRY', $installment = 1, $subscription = false): ThreedsInitialize;
 
+	public function payWithBKM(Collection $products, $currency = 'TRY', $installment = 1, $subscription = false): BkmInitialize;
+
     public function isBillable(): bool;
 
-    public function subscribe(Plan $plan, CreditCard $creditCard): void;
+    public function subscribe(Plan $plan, CreditCard $creditCard): ThreedsInitialize;
 
     public function isSubscribeTo(Plan $plan): bool;
 }

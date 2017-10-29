@@ -2,9 +2,11 @@
 
 namespace Iyzico\IyzipayLaravel\Traits;
 
-use Iyzico\IyzipayLaravel\Exceptions\Fields\TransactionFieldsException;
+use Iyzico\IyzipayLaravel\Exceptions\Bkm\BkmCreateException;
+use Iyzico\IyzipayLaravel\Exceptions\Bkm\BkmInitializeException;
 use Iyzico\IyzipayLaravel\Exceptions\Threeds\ThreedsCreateException;
 use Iyzico\IyzipayLaravel\Exceptions\Threeds\ThreedsInitializeException;
+use Iyzico\IyzipayLaravel\Exceptions\Fields\TransactionFieldsException;
 use Iyzico\IyzipayLaravel\Exceptions\Transaction\TransactionSaveException;
 use Iyzico\IyzipayLaravel\Exceptions\Transaction\TransactionVoidException;
 use Iyzico\IyzipayLaravel\Models\CreditCard;
@@ -16,6 +18,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
 use Iyzipay\Model\Address;
 use Iyzipay\Model\BasketItem;
+use Iyzipay\Model\BkmInitialize;
 use Iyzipay\Model\Buyer;
 use Iyzipay\Model\Cancel;
 use Iyzipay\Model\Currency;
@@ -29,6 +32,7 @@ use Iyzipay\Options;
 use Iyzipay\Request\CreateCancelRequest;
 use Iyzipay\Request\CreatePaymentRequest;
 use Iyzipay\Request\CreateThreedsPaymentRequest;
+use Iyzipay\Request\CreateBkmInitializeRequest;
 
 trait PreparesTransactionRequest
 {
@@ -105,6 +109,16 @@ trait PreparesTransactionRequest
         return $payment;
     }
 
+
+	/**
+	 * @param Payable    $payable
+	 * @param CreditCard $creditCard
+	 * @param array      $attributes
+	 * @param bool       $subscription
+	 *
+	 * @return ThreedsInitialize
+	 * @throws ThreedsInitializeException
+	 */
     protected function initializeThreedsOnIyzipay(
         Payable $payable,
         CreditCard $creditCard,
@@ -135,7 +149,38 @@ trait PreparesTransactionRequest
         return $threedsInitialize;
     }
 
-    /**
+	protected function initializeBKMOnIyzipay(
+		Payable $payable,
+		array $attributes,
+		$subscription = false
+	): BkmInitialize {
+		$this->validateTransactionFields($attributes);
+		$bkmRequest = $this->createBkmInitializeRequest($attributes, $subscription);
+		$bkmRequest->setBuyer($this->prepareBuyer($payable));
+		$bkmRequest->setShippingAddress($this->prepareAddress($payable, 'shippingAddress'));
+		$bkmRequest->setBillingAddress($this->prepareAddress($payable, 'billingAddress'));
+		$bkmRequest->setBasketItems($this->prepareBasketItems($attributes['products']));
+
+		session()->flash('iyzico.products', $attributes['products']);
+
+//		dd($bkmRequest);
+		try {
+			$bkmInitialize = BkmInitialize::create($bkmRequest, $this->getOptions());
+		} catch (\Exception $e) {
+			throw new BkmInitializeException();
+		}
+
+		unset($bkmRequest);
+
+		if ($bkmInitialize->getStatus() != 'success') {
+			throw new BkmInitializeException($bkmInitialize->getErrorMessage());
+		}
+
+		return $bkmInitialize;
+	}
+
+
+	/**
      * @param Transaction $transaction
      *
      * @return Cancel
@@ -183,12 +228,40 @@ trait PreparesTransactionRequest
         $paymentRequest->setInstallment($attributes['installment']);
         $paymentRequest->setPaymentChannel(PaymentChannel::WEB);
         $paymentRequest->setPaymentGroup(($subscription) ? PaymentGroup::SUBSCRIPTION : PaymentGroup::PRODUCT);
+        if(array_key_exists('transactionModel', $attributes)) {
+	        $paymentRequest->setConversationId( $attributes['transactionModel']->id );
+        }
+	    if(array_key_exists('callback', $attributes)) {
+		    $paymentRequest->setCallbackUrl( $attributes['callback'] );
+	    }
+
+        return $paymentRequest;
+    }
+
+    /**
+     * Prepares create payment request class for iyzipay.
+     *
+     * @param array $attributes
+     * @param bool $subscription
+     * @return CreatePaymentRequest
+     */
+    private function createBkmInitializeRequest(array $attributes, $subscription = false): CreateBkmInitializeRequest
+    {
+        $paymentRequest = new createBkmInitializeRequest();
+        $paymentRequest->setLocale($this->getLocale());
+
+        $totalPrice = 0;
+        foreach ($attributes['products'] as $product) {
+            $totalPrice += $product->getPrice();
+        }
+
+        $paymentRequest->setPrice($totalPrice);
+        $paymentRequest->setCurrency($attributes['currency']);
+        $paymentRequest->setPaymentGroup(($subscription) ? PaymentGroup::SUBSCRIPTION : PaymentGroup::PRODUCT);
         if(in_array('transactionModel', $attributes)) {
 	        $paymentRequest->setConversationId( $attributes['transactionModel']->id );
         }
-	    if(in_array('callback', $attributes)) {
-		    $paymentRequest->setCallbackUrl( $attributes['callback'] );
-	    }
+	    $paymentRequest->setCallbackUrl( $attributes['callback'] );
 
         return $paymentRequest;
     }

@@ -36,7 +36,17 @@ class CallbackController extends Controller
 	public function bkmCallback (Request $request)
 	{
 
-		// TODO: BKM entegrasyonu
+		dd($request->all());
+//		if($request->status != 'success') {
+//			app( IyzipayLaravel::class )->cancelThreedsPayment( $request );
+//			return redirect()->route( 'iyzico.callback' )
+//			                 ->with( ['request' => $request->all()] );
+//		}
+//
+//		$transaction = app( IyzipayLaravel::class )->threedsPayment( $request );
+//
+//		return redirect()->route( 'iyzico.callback' )
+//		                 ->with( ['request' => $request->all(), 'transaction' => $transaction] );
 	}
 
 }

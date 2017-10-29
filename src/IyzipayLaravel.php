@@ -13,6 +13,8 @@ use Iyzico\IyzipayLaravel\Exceptions\Iyzipay\IyzipayAuthenticationException;
 use Iyzico\IyzipayLaravel\Exceptions\Iyzipay\IyzipayConnectionException;
 use Iyzico\IyzipayLaravel\Exceptions\Threeds\ThreedsCreateException;
 use Iyzico\IyzipayLaravel\Exceptions\Threeds\ThreedsInitializeException;
+use Iyzico\IyzipayLaravel\Exceptions\Threeds\BkmCreateException;
+use Iyzico\IyzipayLaravel\Exceptions\Threeds\BkmInitializeException;
 use Iyzico\IyzipayLaravel\Models\CreditCard;
 use Iyzico\IyzipayLaravel\Models\Transaction;
 use Iyzico\IyzipayLaravel\Traits\ManagesPlans;
@@ -24,6 +26,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Iyzipay\Model\ApiTest;
 use Iyzipay\Model\Payment;
+use Iyzipay\Model\BkmInitialize;
 use Iyzipay\Model\ThreedsInitialize;
 use Iyzipay\Options;
 use Iyzipay\Model\Locale;
@@ -188,7 +191,6 @@ class IyzipayLaravel
 			);
 
 			return $threedsInitialize;
-
 		} catch (ThreedsInitializeException $e) {
 			$messages[]               = $creditCard->number . ': ' . $e->getMessage();
 			$transactionModel->status = FALSE;
@@ -198,10 +200,9 @@ class IyzipayLaravel
 		}
 		//		}
 
-		throw new TransactionSaveException( implode( ', ', $messages ) );
+		throw new ThreedsInitializeException( implode( ', ', $messages ) );
 
 	}
-
 
 	/**
 	 * @param Request $request
@@ -216,10 +217,11 @@ class IyzipayLaravel
 
 			$threedsPayment = $this->createThreedsPayment( $request );
 
-			$transactionModel = IyzipayLaravel::storeTransactionModel( $transactionModel, $threedsPayment,
+			$transactionModel = $this->storeTransactionModel( $transactionModel, $threedsPayment,
 			                                                           $transactionModel->billable,
 			                                                           session()->get('iyzico.products'),
 			                                                           $transactionModel->creditCard );
+			$this->storeSubscription($transactionModel);
 
 			event( new ThreedsCallback( $transactionModel ) );
 
@@ -229,8 +231,41 @@ class IyzipayLaravel
 			$transactionModel->error  = $transactionModel->creditCard->number . ': ' . $e->getMessage();
 			$transactionModel->save();
 
+			$this->removeSubscription();
+
 			return $transactionModel;
 		}
+
+	}
+
+	public function initializeBkm (
+		Payable $payable, Collection $products, $currency, $installment, $subscription = FALSE
+	): BkmInitialize {
+
+		$this->validateBillable( $payable );
+
+		$callback = route( 'bkm.callback' );
+
+		$messages = []; // @todo: imporove here
+		try {
+			$transactionModel = $this->createTransactionModel( $payable, $products );
+
+			$bkmInitialize = $this->initializeBKMOnIyzipay(
+				$payable,
+				compact( 'products', 'currency', 'installment', 'callback', 'transactionModel' ),
+				$subscription
+			);
+
+			return $bkmInitialize;
+
+		} catch (BkmInitializeException $e) {
+			$messages[]               = $e->getMessage();
+			$transactionModel->status = FALSE;
+			$transactionModel->error  = $messages;
+			$transactionModel->save();
+		}
+
+		throw new TransactionSaveException( implode( ', ', $messages ) );
 
 	}
 
@@ -384,6 +419,21 @@ class IyzipayLaravel
 
 
 	/**
+	 * @param Transaction $transaction
+	 */
+	private function storeSubscription (Transaction $transaction) {
+		if(session()->has('iyzico.subscription')) {
+			$subscription = session()->get('iyzico.subscription');
+			$subscription->next_charge_at = $subscription->next_charge_at->addMonths(($subscription->plan->interval == 'yearly') ? 12 : 1);
+			$subscription->save();
+
+			$transaction->subscription()->associate($subscription);
+			$transaction->save();
+		}
+	}
+
+
+	/**
 	 * @param PayableContract $payable
 	 * @param Collection      $products
 	 * @param CreditCard      $creditCard
@@ -393,7 +443,7 @@ class IyzipayLaravel
 	private function createTransactionModel (
 		Payable $payable,
 		Collection $products,
-		CreditCard $creditCard
+		$creditCard = NULL
 	): Transaction {
 
 		$totalPrice = 0;
@@ -406,7 +456,10 @@ class IyzipayLaravel
 			                                     'products' => $products,
 		                                     ] );
 
-		$transactionModel->creditCard()->associate( $creditCard );
+		if(!empty($creditCard)) {
+			$transactionModel->creditCard()->associate( $creditCard );
+		}
+
 		$payable->transactions()->save( $transactionModel );
 
 		return $transactionModel->fresh();
@@ -426,11 +479,20 @@ class IyzipayLaravel
 		$transactionModel->error  = 'Ödeme iptal edildi';
 		$transactionModel->save();
 
+		$this->removeSubscription();
+
 		event( new ThreedsCancelCallback( $transactionModel ) );
 
 		return $transactionModel;
 	}
 
+	protected function removeSubscription (): void
+	{
+		if(session()->has('iyzico.subscription')) {
+			$subscription = session()->get('iyzico.subscription');
+			$subscription->delete();
+		}
+	}
 
 	/**
 	 * @return string

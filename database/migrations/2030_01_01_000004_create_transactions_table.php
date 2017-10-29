@@ -11,7 +11,7 @@ class CreateTransactionsTable extends Migration
         Schema::create('transactions', function (Blueprint $table) {
             $table->increments('id');
             $table->string('billable_id')->index();
-            $table->unsignedInteger('credit_card_id');
+            $table->unsignedInteger('credit_card_id')->nullable();
             $table->foreign('credit_card_id')->references('id')->on('credit_cards');
             $table->unsignedInteger('subscription_id')->nullable();
             $table->foreign('subscription_id')->references('id')->on('subscriptions');

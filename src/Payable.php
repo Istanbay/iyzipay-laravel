@@ -15,6 +15,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Route;
 use Iyzico\IyzipayLaravel\IyzipayLaravelFacade as IyzipayLaravel;
 use Iyzipay\Model\ThreedsInitialize;
+use Iyzipay\Model\BkmInitialize;
 
 trait Payable
 {
@@ -126,11 +127,16 @@ trait Payable
 		return IyzipayLaravel::initializeThreeds($this, $products, $creditCard, $currency, $installment, $subscription);
     }
 
+    public function payWithBKM(Collection $products, $currency = 'TRY', $installment = 1, $subscription = false): BkmInitialize
+	{
+		return IyzipayLaravel::initializeBkm($this, $products, $currency, $installment, $subscription);
+    }
+
     /**
      * Subscribe to a plan.
      * @param Plan $plan
      */
-    public function subscribe(Plan $plan, CreditCard $creditCard): void
+    public function subscribe(Plan $plan, CreditCard $creditCard): ThreedsInitialize
     {
         Model::unguard();
 
@@ -143,7 +149,7 @@ trait Payable
             ])
         );
 
-        $this->paySubscription($creditCard);
+        return $this->paySubscription($creditCard);
 
         Model::reguard();
     }
@@ -169,7 +175,7 @@ trait Payable
     /**
      * Payment for the subscriptions of payable
      */
-    public function paySubscription(CreditCard $creditCard)
+    public function paySubscription(CreditCard $creditCard): ThreedsInitialize
     {
 	    $this->load('subscriptions');
 
@@ -179,13 +185,16 @@ trait Payable
             }
 
             if ($subscription->next_charge_amount > 0) {
-                $transaction = $this->pay(collect([$subscription->plan]), $creditCard, $subscription->plan->currency, 1, true);
-                $transaction->subscription()->associate($subscription);
-                $transaction->save();
+                $transaction = $this->securePay(collect([$subscription->plan]), $creditCard, $subscription->plan->currency, 1, true);
+	            session()->flash('iyzico.subscription', $subscription);
+
+                return $transaction;
+//                $transaction->subscription()->associate($subscription);
+//                $transaction->save();
             }
 
-            $subscription->next_charge_at = $subscription->next_charge_at->addMonths(($subscription->plan->interval == 'yearly') ? 12 : 1);
-            $subscription->save();
+//            $subscription->next_charge_at = $subscription->next_charge_at->addMonths(($subscription->plan->interval == 'yearly') ? 12 : 1);
+//            $subscription->save();
         }
     }
 
